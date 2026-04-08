@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <ctype.h>
+#include <string.h>
 #include "jogo.h"
 #include "historico.h"
 #include "sorteio.h"
@@ -9,6 +10,7 @@
 #include "text_utils.h"
 
 static const int CONSOLE_WIDTH = 120;
+static const int INITIAL_GUESSES = 3;
 
 static void clear_line(int y)
 {
@@ -32,6 +34,63 @@ static void clear_question_area(void)
 {
     for (int y = 12; y <= 19; ++y)
         clear_line(y);
+}
+
+static void print_centered_line(int y, const char *text, const char *color)
+{
+    if (!text)
+        return;
+
+    int len = (int)strlen(text);
+    int x = (CONSOLE_WIDTH - len) / 2 + 1;
+    if (x < 1)
+        x = 1;
+
+    gotoxy(x, y);
+    print_colored(text, color);
+}
+
+static void draw_centered_banner(const char *text, const char *color)
+{
+    if (!text)
+        return;
+
+    int len = (int)strlen(text);
+    int box_width = len + 12;
+    if (box_width < 40)
+        box_width = 40;
+    if (box_width > CONSOLE_WIDTH - 2)
+        box_width = CONSOLE_WIDTH - 2;
+
+    int x = (CONSOLE_WIDTH - box_width) / 2 + 1;
+    int y = 8;
+
+    draw_double_box(x, y, box_width, 5, color);
+    gotoxy(x + (box_width - len) / 2, y + 2);
+    print_colored(text, color);
+}
+
+static void show_end_screen(const Session *s, int venceu)
+{
+    clear_screen();
+    print_title_bar("LuckyGuess - Resultado", BOLD_BLUE, BOLD_WHITE);
+
+    if (venceu)
+    {
+        draw_centered_banner("VOCE VENCEU", BOLD_YELLOW);
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Voce acertou, depois de %d tentativas.", s->attempts_count);
+        print_centered_line(14, msg, WHITE);
+    }
+    else
+    {
+        draw_centered_banner("GAME OVER", BOLD_RED);
+        print_centered_line(14, "Voce esgotou suas chances de palpite.", WHITE);
+    }
+
+    print_centered_line(16, "Pressione ENTER para ver as estatisticas...", DARK_GRAY);
+    wait_for_enter();
+    clear_question_area();
 }
 
 static int perguntar_para_dica(void)
@@ -74,6 +133,8 @@ static int perguntar_para_dica(void)
 Session executar_partida()
 {
     Session s = {0};
+    int remaining_guesses = INITIAL_GUESSES;
+    int venceu = 0;
     s.target = sortearNumero(); // RF01 [cite: 19]
 
     clear_screen();
@@ -89,12 +150,12 @@ Session executar_partida()
     gotoxy(4, 6);
     print_colored("Digite um palpite entre 1 e 100.", DARK_GRAY);
 
-    while (s.attempts_count < MAX_GUESSES)
+    while (remaining_guesses > 0 && s.attempts_count < MAX_GUESSES)
     {
         int palpite;
         clear_line(8);
         gotoxy(4, 8);
-        printf("Palpite (%d/%d): ", s.attempts_count + 1, MAX_GUESSES);
+        printf("Palpite (tentativa %d, chances %d): ", s.attempts_count + 1, remaining_guesses);
         scanf("%d", &palpite);
 
         if (palpite < 1 || palpite > 100)
@@ -107,35 +168,30 @@ Session executar_partida()
         }
 
         s.guesses[s.attempts_count++] = palpite;
+        remaining_guesses--;
 
         if (palpite == s.target)
         {
-            clear_line(10);
-            gotoxy(4, 10);
-            printf("Voce acertou, depois de %d tentativas.", s.attempts_count);
-            clear_line(12);
-            gotoxy(4, 12);
-            print_colored("Pressione ENTER para ver as estatisticas...", DARK_GRAY);
-            wait_for_enter();
-            clear_question_area();
+            venceu = 1;
             break;
         }
 
         int acertou = perguntar_para_dica();
         clear_line(10);
         gotoxy(4, 10);
+
+        if (palpite < s.target)
+            s.low_count++;
+        else
+            s.high_count++;
+
         if (acertou)
         {
+            remaining_guesses++;
             if (palpite < s.target)
-            {
                 print_colored("Muito baixo!", BRIGHT_CYAN);
-                s.low_count++;
-            }
             else
-            {
                 print_colored("Muito alto!", BRIGHT_MAGENTA);
-                s.high_count++;
-            }
         }
         else
         {
@@ -144,6 +200,8 @@ Session executar_partida()
 
         clear_question_area();
     }
+
+    show_end_screen(&s, venceu);
 
     salvar_sessao(s); // RF03 [cite: 27]
     return s;
