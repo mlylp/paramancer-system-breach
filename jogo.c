@@ -3,6 +3,9 @@
 #include <time.h>
 #include <ctype.h>
 #include <string.h>
+#ifdef _WIN32
+#include <conio.h>
+#endif
 #include "jogo.h"
 #include "historico.h"
 #include "sorteio.h"
@@ -34,6 +37,61 @@ static void clear_question_area(void)
 {
     for (int y = 12; y <= 19; ++y)
         clear_line(y);
+}
+
+static int read_guess_or_cancel(int *out_guess)
+{
+#ifdef _WIN32
+    if (!out_guess)
+        return 0;
+
+    char buf[16];
+    int len = 0;
+
+    for (;;)
+    {
+        int ch = _getch();
+        if (ch == 27)
+            return 0;
+        if (ch == '\r')
+        {
+            if (len == 0)
+                continue;
+            buf[len] = '\0';
+            *out_guess = atoi(buf);
+            return 1;
+        }
+        if (ch == '\b')
+        {
+            if (len > 0)
+            {
+                len--;
+                printf("\b \b");
+            }
+            continue;
+        }
+        if (ch >= '0' && ch <= '9')
+        {
+            if (len < (int)sizeof(buf) - 1)
+            {
+                buf[len++] = (char)ch;
+                putchar(ch);
+            }
+        }
+    }
+#else
+    if (!out_guess)
+        return 0;
+
+    char line[32];
+    if (!fgets(line, sizeof(line), stdin))
+        return 0;
+    if ((unsigned char)line[0] == 27)
+        return 0;
+
+    *out_guess = atoi(line);
+    return 1;
+#endif
 }
 
 static void print_centered_line(int y, const char *text, const char *color)
@@ -135,6 +193,7 @@ Session executar_partida()
     Session s = {0};
     int remaining_guesses = INITIAL_GUESSES;
     int venceu = 0;
+    int canceled = 0;
     s.target = sortearNumero(); // RF01 [cite: 19]
 
     clear_screen();
@@ -155,8 +214,14 @@ Session executar_partida()
         int palpite;
         clear_line(8);
         gotoxy(4, 8);
-        printf("Palpite (tentativa %d, chances %d): ", s.attempts_count + 1, remaining_guesses);
-        scanf("%d", &palpite);
+        printf("Palpite (tentativa %d, chances %d, ESC para sair): ", s.attempts_count + 1, remaining_guesses);
+        fflush(stdout);
+        if (!read_guess_or_cancel(&palpite))
+        {
+            canceled = 1;
+            s.attempts_count = -1;
+            break;
+        }
 
         if (palpite < 1 || palpite > 100)
         {
@@ -200,6 +265,9 @@ Session executar_partida()
 
         clear_question_area();
     }
+
+    if (canceled)
+        return s;
 
     show_end_screen(&s, venceu);
 

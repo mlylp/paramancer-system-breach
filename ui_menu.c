@@ -299,7 +299,8 @@ int run_main_menu(void)
             {
                 clear_screen();
                 Session s = executar_partida();
-                show_session_summary(s);
+                if (s.attempts_count >= 0)
+                    show_session_summary(s);
                 draw_menu_frame();
                 last_selected = -1;
             }

@@ -23,22 +23,24 @@ int sortearPergunta(void)
 {
     inicializar_seed();
 
-    FILE *arquivo = fopen("perguntas.csv", "r");
-    if (arquivo == NULL)
-        return -1;
-
-    int total_linhas = 0;
-    char linha[2048];
-
-    while (fgets(linha, sizeof(linha), arquivo) != NULL)
+    static int total_linhas = -1;
+    if (total_linhas < 0)
     {
-        if (linha[0] != '\n' && linha[0] != '\r' && linha[0] != '\0')
-        {
-            total_linhas++;
-        }
-    }
+        FILE *arquivo = fopen("perguntas.csv", "r");
+        if (arquivo == NULL)
+            return -1;
 
-    fclose(arquivo);
+        total_linhas = 0;
+        char linha[2048];
+
+        while (fgets(linha, sizeof(linha), arquivo) != NULL)
+        {
+            if (linha[0] != '\n' && linha[0] != '\r' && linha[0] != '\0')
+                total_linhas++;
+        }
+
+        fclose(arquivo);
+    }
 
     if (total_linhas <= 0)
         return -1;

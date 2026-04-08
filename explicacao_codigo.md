@@ -660,22 +660,24 @@ int sortearPergunta(void)
 {
     inicializar_seed();
 
-    FILE *arquivo = fopen("perguntas.csv", "r");
-    if (arquivo == NULL)
-        return -1;
-
-    int total_linhas = 0;
-    char linha[2048];
-
-    while (fgets(linha, sizeof(linha), arquivo) != NULL)
+    static int total_linhas = -1;
+    if (total_linhas < 0)
     {
-        if (linha[0] != '\n' && linha[0] != '\r' && linha[0] != '\0')
-        {
-            total_linhas++;
-        }
-    }
+        FILE *arquivo = fopen("perguntas.csv", "r");
+        if (arquivo == NULL)
+            return -1;
 
-    fclose(arquivo);
+        total_linhas = 0;
+        char linha[2048];
+
+        while (fgets(linha, sizeof(linha), arquivo) != NULL)
+        {
+            if (linha[0] != '\n' && linha[0] != '\r' && linha[0] != '\0')
+                total_linhas++;
+        }
+
+        fclose(arquivo);
+    }
 
     if (total_linhas <= 0)
         return -1;
@@ -683,33 +685,10 @@ int sortearPergunta(void)
     return (rand() % total_linhas) + 1;
 }
 ```
-> Explicacao: Linhas 22-47 contam as linhas do CSV e sorteiam um id valido.
-- L22: Define a assinatura da funcao.
-- L23: Abre o bloco da funcao.
-- L24: Chama [Funcao inicializar_seed](#funcao-inicializar_seed-sorteio-c).
-- L25: Linha em branco para separar a abertura do arquivo.
-- L26: Abre o arquivo `perguntas.csv` em modo leitura.
-- L27: Verifica falha na abertura.
-- L28: Retorna -1 quando nao consegue abrir.
-- L29: Linha em branco para separar variaveis locais.
-- L30: Inicializa o contador de linhas.
-- L31: Declara buffer para leitura de linha.
-- L32: Linha em branco para separar o loop.
-- L33: Le cada linha do arquivo.
-- L34: Abre o bloco do `while`.
-- L35: Verifica se a linha nao e vazia.
-- L36: Abre o bloco do `if`.
-- L37: Incrementa o total de linhas validas.
-- L38: Fecha o bloco do `if`.
-- L39: Fecha o bloco do `while`.
-- L40: Linha em branco para separar fechamento do arquivo.
-- L41: Fecha o arquivo.
-- L42: Linha em branco para separar validacao.
-- L43: Retorna -1 se nao houver linhas.
-- L44: Retorno imediato quando o arquivo esta vazio.
-- L45: Linha em branco para separar retorno final.
-- L46: Retorna um id aleatorio entre 1 e `total_linhas`.
-- L47: Fecha o bloco da funcao.
+> Explicacao: Este trecho conta as linhas do CSV uma unica vez e reutiliza o total nas chamadas seguintes.
+- Usa `static int total_linhas` para cachear o total.
+- Le o arquivo apenas se o cache ainda nao foi preenchido.
+- Retorna um id valido entre 1 e `total_linhas`.
 
 ## Arquivo jogo.h
 
@@ -743,18 +722,16 @@ Session executar_partida();
 - L2: Inclui stdlib.h para utilitarios gerais.
 - L3: Inclui time.h para `time`, `localtime` e `strftime`.
 - L4: Inclui ctype.h para `tolower`.
-- L5: Inclui jogo.h para `executar_partida`.
-- L6: Inclui historico.h para `salvar_sessao`.
-- L7: Inclui sorteio.h para `sortearNumero` e `sortearPergunta`.
-- L8: Inclui perguntas.h para `Pergunta` e `carregar_pergunta_por_id`.
-- L9: Inclui text_utils.h (biblioteca externa nao detalhada aqui).
-- L10: Linha em branco para separar includes do codigo.
-- L11: Declara constante `CONSOLE_WIDTH`.
-- L12: Linha em branco para separar funcoes.
-- L19: Linha em branco para separar funcoes.
-- L30: Linha em branco para separar funcoes.
-- L36: Linha em branco para separar funcoes.
-- L73: Linha em branco para separar funcoes.
+- L5: Inclui string.h para `strlen`.
+- L6: Inclui jogo.h para `executar_partida`.
+- L7: Inclui historico.h para `salvar_sessao`.
+- L8: Inclui sorteio.h para `sortearNumero` e `sortearPergunta`.
+- L9: Inclui perguntas.h para `Pergunta` e `carregar_pergunta_por_id`.
+- L10: Inclui text_utils.h (biblioteca externa nao detalhada aqui).
+- L11: Linha em branco para separar includes do codigo.
+- L12: Declara constante `CONSOLE_WIDTH`.
+- L13: Declara constante `INITIAL_GUESSES`.
+- L14: Linha em branco para separar funcoes.
 
 <a id="funcao-clear_line-jogo-c"></a>
 ### Funcao clear_line (jogo.c)
@@ -821,6 +798,93 @@ static void clear_question_area(void)
 - L33: Loop pelas linhas 12 a 19.
 - L34: Chama [Funcao clear_line](#funcao-clear_line-jogo-c) para limpar cada linha.
 - L35: Fecha o bloco da funcao.
+
+<a id="funcao-print_centered_line-jogo-c"></a>
+### Funcao print_centered_line (jogo.c)
+
+Codigo da funcao:
+```c
+static void print_centered_line(int y, const char *text, const char *color)
+{
+    if (!text)
+        return;
+
+    int len = (int)strlen(text);
+    int x = (CONSOLE_WIDTH - len) / 2 + 1;
+    if (x < 1)
+        x = 1;
+
+    gotoxy(x, y);
+    print_colored(text, color);
+}
+```
+> Explicacao: Centraliza um texto em uma linha do console e aplica cor.
+- Calcula o comprimento e a posicao X centralizada.
+- Protege contra posicao invalida.
+- Move o cursor e imprime o texto colorido.
+
+<a id="funcao-draw_centered_banner-jogo-c"></a>
+### Funcao draw_centered_banner (jogo.c)
+
+Codigo da funcao:
+```c
+static void draw_centered_banner(const char *text, const char *color)
+{
+    if (!text)
+        return;
+
+    int len = (int)strlen(text);
+    int box_width = len + 12;
+    if (box_width < 40)
+        box_width = 40;
+    if (box_width > CONSOLE_WIDTH - 2)
+        box_width = CONSOLE_WIDTH - 2;
+
+    int x = (CONSOLE_WIDTH - box_width) / 2 + 1;
+    int y = 8;
+
+    draw_double_box(x, y, box_width, 5, color);
+    gotoxy(x + (box_width - len) / 2, y + 2);
+    print_colored(text, color);
+}
+```
+> Explicacao: Desenha um banner centralizado com borda dupla e texto no meio.
+- Ajusta a largura do banner com limites min/max.
+- Centraliza o box e imprime o texto no meio.
+
+<a id="funcao-show_end_screen-jogo-c"></a>
+### Funcao show_end_screen (jogo.c)
+
+Codigo da funcao:
+```c
+static void show_end_screen(const Session *s, int venceu)
+{
+    clear_screen();
+    print_title_bar("LuckyGuess - Resultado", BOLD_BLUE, BOLD_WHITE);
+
+    if (venceu)
+    {
+        draw_centered_banner("VOCE VENCEU", BOLD_YELLOW);
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Voce acertou, depois de %d tentativas.", s->attempts_count);
+        print_centered_line(14, msg, WHITE);
+    }
+    else
+    {
+        draw_centered_banner("GAME OVER", BOLD_RED);
+        print_centered_line(14, "Voce esgotou suas chances de palpite.", WHITE);
+    }
+
+    print_centered_line(16, "Pressione ENTER para ver as estatisticas...", DARK_GRAY);
+    wait_for_enter();
+    clear_question_area();
+}
+```
+> Explicacao: Exibe a tela final com banner, mensagem centralizada e pausa do usuario.
+- Usa a flag `venceu` para escolher o texto e a cor.
+- Mostra a mensagem de tentativas quando ha vitoria.
+- Exibe game over quando as chances de palpite acabam.
+- Aguarda ENTER antes de seguir para as estatisticas.
 
 <a id="funcao-perguntar_para_dica-jogo-c"></a>
 ### Funcao perguntar_para_dica (jogo.c)
@@ -910,6 +974,8 @@ Codigo da funcao:
 Session executar_partida()
 {
     Session s = {0};
+    int remaining_guesses = INITIAL_GUESSES;
+    int venceu = 0;
     s.target = sortearNumero(); // RF01 [cite: 19]
 
     clear_screen();
@@ -925,12 +991,12 @@ Session executar_partida()
     gotoxy(4, 6);
     print_colored("Digite um palpite entre 1 e 100.", DARK_GRAY);
 
-    while (s.attempts_count < MAX_GUESSES)
+    while (remaining_guesses > 0 && s.attempts_count < MAX_GUESSES)
     {
         int palpite;
         clear_line(8);
         gotoxy(4, 8);
-        printf("Palpite (%d/%d): ", s.attempts_count + 1, MAX_GUESSES);
+        printf("Palpite (tentativa %d, chances %d): ", s.attempts_count + 1, remaining_guesses);
         scanf("%d", &palpite);
 
         if (palpite < 1 || palpite > 100)
@@ -943,35 +1009,30 @@ Session executar_partida()
         }
 
         s.guesses[s.attempts_count++] = palpite;
+        remaining_guesses--;
 
         if (palpite == s.target)
         {
-            clear_line(10);
-            gotoxy(4, 10);
-            printf("Voce acertou, depois de %d tentativas.", s.attempts_count);
-            clear_line(12);
-            gotoxy(4, 12);
-            print_colored("Pressione ENTER para ver as estatisticas...", DARK_GRAY);
-            wait_for_enter();
-            clear_question_area();
+            venceu = 1;
             break;
         }
 
         int acertou = perguntar_para_dica();
         clear_line(10);
         gotoxy(4, 10);
+
+        if (palpite < s.target)
+            s.low_count++;
+        else
+            s.high_count++;
+
         if (acertou)
         {
+            remaining_guesses++;
             if (palpite < s.target)
-            {
                 print_colored("Muito baixo!", BRIGHT_CYAN);
-                s.low_count++;
-            }
             else
-            {
                 print_colored("Muito alto!", BRIGHT_MAGENTA);
-                s.high_count++;
-            }
         }
         else
         {
@@ -981,88 +1042,18 @@ Session executar_partida()
         clear_question_area();
     }
 
+    show_end_screen(&s, venceu);
+
     salvar_sessao(s); // RF03 [cite: 27]
     return s;
 }
 ```
-> Explicacao: Linhas 74-150 executam uma partida completa, registrando palpites e salvando a sessao.
-- L74: Define a assinatura da funcao.
-- L75: Abre o bloco da funcao.
-- L76: Inicializa `Session s` com zeros.
-- L77: Sorteia o alvo chamando [Funcao sortearNumero](#funcao-sortearnumero-sorteio-c).
-- L78: Linha em branco para separar a interface.
-- L79: Limpa a tela usando TextUtils.
-- L80: Desenha a barra de titulo usando TextUtils.
-- L81: Linha em branco para separar timestamp.
-- L82: Comentario sobre o timestamp.
-- L83: Captura o tempo atual.
-- L84: Converte para `struct tm` local.
-- L85: Formata data/hora no campo `timestamp`.
-- L86: Linha em branco para separar mensagens iniciais.
-- L87: Posiciona o cursor para a primeira mensagem.
-- L88: Imprime a mensagem de inicio.
-- L89: Posiciona o cursor para a segunda mensagem.
-- L90: Imprime instrucoes do palpite.
-- L91: Linha em branco para separar o loop principal.
-- L92: Loop enquanto houver tentativas disponiveis.
-- L93: Abre o bloco do `while`.
-- L94: Declara a variavel `palpite`.
-- L95: Limpa a linha do prompt.
-- L96: Posiciona o cursor para o prompt.
-- L97: Imprime o prompt com contador de tentativas.
-- L98: Le o palpite do usuario.
-- L99: Linha em branco para separar validacao.
-- L100: Verifica se o palpite esta fora do intervalo 1-100.
-- L101: Abre o bloco do `if` de erro.
-- L102: Limpa a linha de feedback.
-- L103: Posiciona o cursor para a mensagem.
-- L104: Exibe mensagem de erro.
-- L105: Limpa a area de perguntas.
-- L106: Usa `continue` para pular para a proxima iteracao.
-- L107: Fecha o bloco do `if`.
-- L108: Linha em branco para separar registro do palpite.
-- L109: Armazena o palpite e incrementa `attempts_count`.
-- L110: Linha em branco para separar verificacao de acerto.
-- L111: Compara o palpite com o alvo.
-- L112: Abre o bloco do `if` de acerto.
-- L113: Limpa a linha de feedback.
-- L114: Posiciona o cursor para a mensagem de acerto.
-- L115: Imprime mensagem com numero de tentativas.
-- L116: Limpa a linha 12.
-- L117: Posiciona o cursor para a instrucao.
-- L118: Mostra a instrucao de ENTER.
-- L119: Chama [Funcao wait_for_enter](#funcao-wait_for_enter-jogo-c).
-- L120: Limpa a area de perguntas.
-- L121: Sai do loop com `break`.
-- L122: Fecha o bloco do `if`.
-- L123: Linha em branco para separar a pergunta.
-- L124: Chama [Funcao perguntar_para_dica](#funcao-perguntar_para_dica-jogo-c).
-- L125: Limpa a linha de feedback.
-- L126: Posiciona o cursor para o feedback.
-- L127: Verifica se a resposta foi correta.
-- L128: Abre o bloco do `if`.
-- L129: Verifica se o palpite foi abaixo do alvo.
-- L130: Abre o bloco do `if` interno.
-- L131: Exibe a dica "Muito baixo!".
-- L132: Incrementa `low_count`.
-- L133: Fecha o bloco do `if` interno.
-- L134: Caso contrario, trata como palpite alto.
-- L135: Abre o bloco do `else`.
-- L136: Exibe a dica "Muito alto!".
-- L137: Incrementa `high_count`.
-- L138: Fecha o bloco do `else`.
-- L139: Fecha o bloco do `if` principal.
-- L140: Caso resposta incorreta, entra aqui.
-- L141: Abre o bloco do `else`.
-- L142: Exibe mensagem de erro.
-- L143: Fecha o bloco do `else`.
-- L144: Linha em branco para separar limpeza.
-- L145: Limpa a area de perguntas.
-- L146: Fecha o bloco do `while`.
-- L147: Linha em branco para separar salvamento.
-- L148: Chama [Funcao salvar_sessao](#funcao-salvar_sessao-historico-c).
-- L149: Retorna a sessao preenchida.
-- L150: Fecha o bloco da funcao.
+> Explicacao: Executa a partida com 3 chances iniciais e ajusta as chances conforme as perguntas.
+- Controle de `remaining_guesses` limita o numero de palpites.
+- Cada palpite valido consome 1 chance; resposta correta devolve 1.
+- `low_count`/`high_count` sao contabilizados mesmo sem dica exibida.
+- Se as chances chegam a zero sem acerto, a tela final mostra game over.
+- A tela final e exibida por [Funcao show_end_screen](#funcao-show_end_screen-jogo-c).
 
 ## Arquivo ui_menu.h
 
