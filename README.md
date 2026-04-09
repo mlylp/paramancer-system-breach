@@ -48,3 +48,6 @@ Alternativa (lista explicita de arquivos):
 gcc -std=c11 -Wall -Wextra -o luckyguess.exe main.c ui_menu.c jogo.c analise.c historico.c perguntas.c sorteio.c text_utils.c
 ```
 
+## Updates futuras
+
+Implementação de outras biblioteca gráfica **[raygui](https://github.com/raysan5/raygui)**
